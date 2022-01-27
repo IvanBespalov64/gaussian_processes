@@ -1,1 +1,1 @@
-Здесь будут попытки написать свою Mean function для GPy
+Bayessian optimization with GP and Mean function
