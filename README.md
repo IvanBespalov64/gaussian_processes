@@ -1,1 +1,1 @@
-Bayessian optimization with GP and Mean function
+Bayesian optimization with GP and Mean function
