@@ -96,6 +96,7 @@ class sparse_expected_improvement(AcquisitionFunctionClass):
         mean, variance = self._model.predict(tf.squeeze(x, -2))
         normal = tfp.distributions.Normal(mean, tf.sqrt(variance))
         rdists = tf.math.mod(tf.abs(x - self._dataset.query_points), 2 * np.pi)
-        dists = tf.reshape(tf.reduce_min(tf.math.reduce_sum(tf.minimum(rdists, 2*np.pi - rdists), axis=-1), axis=-1), [x.shape[0], 1])
+        #reduce_sum replaced by reduce_max. After that we changed l1-norm to 'max_comp_dist'
+        dists = tf.reshape(tf.reduce_min(tf.math.reduce_max(tf.minimum(rdists, 2*np.pi - rdists), axis=-1), axis=-1), [x.shape[0], 1])
         acq_vals = (self._eta - mean) * normal.cdf(self._eta) + variance * normal.prob(self._eta)
         return tf.where(dists > self._threshold, acq_vals, 0.1 * acq_vals)

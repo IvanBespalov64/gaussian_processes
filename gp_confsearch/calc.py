@@ -10,16 +10,28 @@ import numpy as np
 
 from sklearn.cluster import KMeans
 
+import default_vals
+
 HARTRI_TO_KCAL = 627.509474063 
 
-USE_ORCA = True
-ORCA_EXEC_COMMAND = "/opt/orca5/orca"
-GAUSSIAN_EXEC_COMMAND = "srung"
-DEFAULT_NUM_OF_PROCS = 24
-DEFAULT_METHOD = "RHF/STO-3G"
-DEFAULT_ORCA_METHOD = "r2SCAN-3c TightSCF"
-DEFAULT_CHARGE = 0
-DEFAULT_MULTIPL = 1
+#USE_ORCA = True
+#ORCA_EXEC_COMMAND = "/opt/orca5/orca"
+#GAUSSIAN_EXEC_COMMAND = "srung"
+#DEFAULT_NUM_OF_PROCS = 24
+#DEFAULT_METHOD = "RHF/STO-3G"
+#DEFAULT_ORCA_METHOD = "r2SCAN-3c TightSCF"
+#DEFAULT_CHARGE = 0
+#DEFAULT_MULTIPL = 1
+
+USE_ORCA = default_vals.USE_ORCA
+ORCA_EXEC_COMMAND = default_vals.ORCA_EXEC_COMMAND
+GAUSSIAN_EXEC_COMMAND = default_vals.GAUSSIAN_EXEC_COMMAND
+DEFAULT_NUM_OF_PROCS = default_vals.DEFAULT_NUM_OF_PROCS
+DEFAULT_METHOD = default_vals.DEFAULT_METHOD
+DEFAULT_ORCA_METHOD = default_vals.DEFAULT_ORCA_METHOD
+DEFAULT_CHARGE = default_vals.DEFAULT_CHARGE
+DEFAULT_MULTIPL = default_vals.DEFAULT_MULTIPL
+
 
 CURRENT_STRUCTURE_ID = 0 # global id for every structure that we would save
 
@@ -119,7 +131,10 @@ def generate_oinp(coords : str,
         generates orca .inp file
     """
     with open(gjf_name, 'w+') as file:
-        file.write("!" + method_of_calc + " opt\n")
+        opt_cmd = "opt"
+        if default_vals.ts:
+            opt_cmd = "OptTS"
+        file.write("!" + method_of_calc + f" {opt_cmd}\n")
         file.write("%pal\nnprocs " + str(num_of_procs) + "\nend\n")
         #file.write("%geom Constraints\n")
         #dihedrals = to_degrees(dihedrals)
@@ -216,6 +231,9 @@ def calc_energy(mol_file_name : str,
         with current properties and returns it as float
         Also displace atoms on random distances is RANDOM_DISPLACEMENT = True
     """
+
+    print(f"Calc with save_struct={save_structs}")
+
     xyz_upd = change_dihedrals(mol_file_name, dihedrals)
 
     print(dihedrals)
@@ -246,7 +264,8 @@ def calc_energy(mol_file_name : str,
         start_calc(inp_name)
         wait_for_the_end_of_calc(out_name, 1000)
         res = find_energy_in_log(out_name) * HARTRI_TO_KCAL - norm_energy
-    return res, parse_points_from_trj(inp_name[:-4] + "_trj.xyz", list(zip(*dihedrals))[0], norm_energy, save_structs) if USE_ORCA and len(dihedrals) != 0 else None
+    return res
+    #return res, parse_points_from_trj(inp_name[:-4] + "_trj.xyz", list(zip(*dihedrals))[0], norm_energy, save_structs, "structs/") if USE_ORCA and len(dihedrals) != 0 else None
 
 def dihedral_angle(a : list[float], b : list[float], c : list[float], d : list[float]) -> float:
     """
@@ -269,11 +288,10 @@ def dihedral_angle(a : list[float], b : list[float], c : list[float], d : list[f
 
     res =  -np.arctan2(np.dot(m, nJKL) / np.sqrt(lengthSq(m) * lengthSq(nJKL)),\
                        np.dot(nIJK, nJKL) / np.sqrt(lengthSq(nIJK) * lengthSq(nJKL)))
-    
     return (res + 2 * np.pi) % (2 * np.pi)
-
+       
 def parse_points_from_trj(trj_file_name : str,
-                          dihedrals : list[list[int]],
+                          dihedrals : list,
                           norm_en : float, 
                           save_structs : bool = True,
                           structures_path : str = "structs/") -> list[tuple[list[dihedral], float]]:
@@ -282,6 +300,8 @@ def parse_points_from_trj(trj_file_name : str,
         returns list of description of dihedrals
         for every point
     """
+
+    print(f"Parsing starts with norm_en={norm_en}, save_struct={save_structs}")
 
     result = []
 
@@ -303,31 +323,42 @@ def parse_points_from_trj(trj_file_name : str,
                 c_coord = list(map(float, lines[i * (n + 2) + 2 + c].split()[1:]))
                 d_coord = list(map(float, lines[i * (n + 2) + 2 + d].split()[1:]))    
                 cur_d.append(dihedral_angle(a_coord, b_coord, c_coord, d_coord))
+                #print(a_coord, b_coord, c_coord, d_coord, cur_d[-1])
             result.append((cur_d, energy))
     
+    #We skip last point because of we put it into the dataset after first query of calc
     points, obs = list(zip(*result))
 
-    #print(points)
-    #print(obs)
+    print(f"Points in trj: {len(result)}")
+    print(result)
    
-    num_of_clusters = len(points) // 4
+    num_of_clusters = len(points) // 5
  
+    print(f"Num of clusters: {num_of_clusters}")
+
     vals = {cluster_id : (1e9, -1) for cluster_id in range(num_of_clusters)}
+
+    print(points)
+    print(len(points))
 
     model = KMeans(n_clusters=num_of_clusters)
     model.fit(points)
     
     for i in range(len(points)):
         cluster = model.predict([points[i]])[0]
+        print(cluster)
         if vals[cluster][0] > obs[i]:
             vals[cluster] = obs[i], i
-    
-    #print(vals)
-
+    print(len(vals))
+    print(vals)
+    print(f"PARSING POINTS, CLUSTER NUM = {num_of_clusters}")
     if save_structs:
+        print("SAVING STRUCTS")
         for cluster_id in vals:
+            print(f"saving struct number {CURRENT_STRUCTURE_ID}")
             with open(structures_path + str(CURRENT_STRUCTURE_ID) + ".xyz", "w") as file:
                 file.write(structures[vals[cluster_id][1]])
+                print("saved")
             CURRENT_STRUCTURE_ID += 1
     
     return [(points[vals[cluster_id][1]], vals[cluster_id][0]) for cluster_id in vals]

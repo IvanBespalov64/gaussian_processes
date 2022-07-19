@@ -29,7 +29,7 @@ from sklearn.cluster import DBSCAN
 from tensorflow.python.ops.numpy_ops import np_config
 np_config.enable_numpy_behavior()
 
-MOL_FILE_NAME = "tests/cur.mol"
+MOL_FILE_NAME = "large_test.sdf"
 NORM_ENERGY = 0.
 RANDOM_DISPLACEMENT = True
 
@@ -269,6 +269,8 @@ for ids, coefs in coef_matrix:
 
 print(DIHEDRAL_IDS)
 print(mean_func_coefs)
+
+exit(0) #Test here
 
 search_space = Box([0, 0], [2 * np.pi, 2 * np.pi])  # define the search space directly
 
